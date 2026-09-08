@@ -89,6 +89,7 @@ final class LaunchService
         $this->entryUrlGuard->assertLaunchable($app);
 
         $entryUrl = $this->resolveEntryUrl($app, $pinnedVersion, $userId);
+        $launchManifest = $this->versions->manifestForLaunchBundle($app, $pinnedVersion);
 
         return [
             'slug' => $app->slug,
@@ -100,12 +101,8 @@ final class LaunchService
             'bundle_version' => $pinnedVersion,
             'scopes_granted' => $minted['scopes_granted'],
             'expires_in' => $minted['expires_in'],
-            'parent_bridge' => ParentBridgeManifest::catalogFromManifest(
-                is_array($app->manifest) ? $app->manifest : null,
-            ),
-            'parent_bridge_demo' => ParentBridgeDemoFixtures::forManifest(
-                is_array($app->manifest) ? $app->manifest : null,
-            ),
+            'parent_bridge' => ParentBridgeManifest::catalogFromManifest($launchManifest),
+            'parent_bridge_demo' => ParentBridgeDemoFixtures::forManifest($launchManifest),
         ];
     }
 
@@ -185,6 +182,16 @@ final class LaunchService
             }
 
             return $this->runtimeServe->buildRuntimeIndexUrl($app, null, $bundle['entry']);
+        }
+
+        // Iframe: prefer entry_url from the pinned version row so open-without-Update
+        // does not jump to the live catalog URL after a published upgrade.
+        if ($bundleVersion !== null) {
+            $manifest = $this->versions->manifestForLaunchBundle($app, $bundleVersion);
+            $pinnedEntry = is_array($manifest) ? trim((string) ($manifest['entry_url'] ?? $manifest['runtime_url'] ?? '')) : '';
+            if ($pinnedEntry !== '') {
+                return $pinnedEntry;
+            }
         }
 
         return $app->entry_url;
